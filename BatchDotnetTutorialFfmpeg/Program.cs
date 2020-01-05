@@ -12,6 +12,7 @@ namespace BatchDotnetTutorialFfmpeg
     using Microsoft.Azure.Batch;
     using Microsoft.Azure.Batch.Auth;
     using Microsoft.Azure.Batch.Common;
+    using Microsoft.Extensions.Configuration;
     using Microsoft.WindowsAzure.Storage;
     using Microsoft.WindowsAzure.Storage.Blob;
 
@@ -21,50 +22,69 @@ namespace BatchDotnetTutorialFfmpeg
         // These are used when constructing connection strings for the Batch and Storage client objects.
 
         // Batch account credentials
-        private const string BatchAccountName = "";
-        private const string BatchAccountKey = "";
-        private const string BatchAccountUrl = "";
+        private static readonly string BatchAccountName = "";
+        private static readonly string BatchAccountKey = "";
+        private static readonly string BatchAccountUrl = "";
 
         // Storage account credentials
-        private const string StorageAccountName = "";
-        private const string StorageAccountKey = "";
+        private static readonly string StorageAccountName = "";
+        private static readonly string StorageAccountKey = "";
 
         // Pool and Job constants
-        private const string PoolId = "WinFFmpegPool";
-        private const int DedicatedNodeCount = 0;
-        private const int LowPriorityNodeCount = 5;
-        private const string PoolVMSize = "STANDARD_A1_v2";
-        private const string JobId = "WinFFmpegJob";
-
-        // Application package Id and version
-        // This assumes the Windows ffmpeg app package is already added to the Batch account with this Id and version. 
-        // First download ffmpeg zipfile from https://ffmpeg.zeranoe.com/builds/win64/static/ffmpeg-3.4-win64-static.zip.
-        // To add package to the Batch account, see https://docs.microsoft.com/azure/batch/batch-application-packages.
+        private static readonly string PoolId = "WinFFmpegPool";
+        private static readonly int DedicatedNodeCount = 0;
+        private static readonly int LowPriorityNodeCount = 5;
+        private static readonly string PoolVMSize = "STANDARD_A1_v2";
+        private static readonly string JobId = "WinFFmpegJob";
 
         const string appPackageId = "ffmpeg";
         const string appPackageVersion = "3.4";
 
+        private static readonly IConfiguration configuration;
+
+        static Program()
+        {
+            var configBuilder = new ConfigurationBuilder()
+                .AddJsonFile("appsettings.json", optional: false)
+                .AddUserSecrets("277c6260-0aee-4946-86c8-764a606c1bf6")
+                .AddEnvironmentVariables();
+
+            configuration = configBuilder.Build();
+
+            BatchAccountName = configuration["BatchAccountName"];
+            BatchAccountKey = configuration["BatchAccountKey"];
+            BatchAccountUrl = configuration["BatchAccountUrl"];
+
+            StorageAccountName = configuration["StorageAccountName"];
+            StorageAccountKey = configuration["StorageAccountKey"];
+
+            PoolId = configuration["PoolId"];
+            DedicatedNodeCount = int.Parse(configuration["DedicatedNodeCount"]);
+            LowPriorityNodeCount = int.Parse(configuration["LowPriorityNodeCount"]);
+            PoolVMSize = configuration["PoolVMSize"];
+            JobId = configuration["JobId"];
+        }
+
         public static void Main(string[] args)
         {
-            if (String.IsNullOrEmpty(BatchAccountName) ||
-                String.IsNullOrEmpty(BatchAccountKey) ||
-                String.IsNullOrEmpty(BatchAccountUrl) ||
-                String.IsNullOrEmpty(StorageAccountName) ||
-                String.IsNullOrEmpty(StorageAccountKey))
+            if (string.IsNullOrEmpty(BatchAccountName) ||
+                string.IsNullOrEmpty(BatchAccountKey) ||
+                string.IsNullOrEmpty(BatchAccountUrl) ||
+                string.IsNullOrEmpty(StorageAccountName) ||
+                string.IsNullOrEmpty(StorageAccountKey))
             {
                 throw new InvalidOperationException("One or more account credential strings have not been populated. Please ensure that your Batch and Storage account credentials have been specified.");
             }
 
             try
             {
-                // Call the asynchronous version of the Main() method. This is done so that we can await various
-                // calls to async methods within the "Main" method of this console application.
                 MainAsync().Wait();
             }
-            catch (AggregateException)
+            catch (AggregateException ex)
             {
                 Console.WriteLine();
                 Console.WriteLine("One or more exceptions occurred.");
+                Console.WriteLine(ex.Message);
                 Console.WriteLine();
             }
             finally
@@ -75,10 +95,6 @@ namespace BatchDotnetTutorialFfmpeg
             }
         }
 
-        /// <summary>
-        /// Provides an asynchronous version of the Main method, allowing for the awaiting of async method calls within.
-        /// </summary>
-        /// <returns>A <see cref="System.Threading.Tasks.Task"/> object that represents the asynchronous operation.</returns>
         private static async Task MainAsync()
         {
             Console.WriteLine("Sample start: {0}", DateTime.Now);
@@ -87,16 +103,16 @@ namespace BatchDotnetTutorialFfmpeg
             timer.Start();
 
             // Construct the Storage account connection string
-            string storageConnectionString = String.Format("DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1}",
+            string storageConnectionstring = string.Format("DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1}",
                                 StorageAccountName, StorageAccountKey);
 
             // Retrieve the storage account
-            CloudStorageAccount storageAccount = CloudStorageAccount.Parse(storageConnectionString);
+            CloudStorageAccount storageAccount = CloudStorageAccount.Parse(storageConnectionstring);
 
             // Create the blob client, for use in obtaining references to blob storage containers
             CloudBlobClient blobClient = storageAccount.CreateCloudBlobClient();
 
-             
+
             // Use the blob client to create the containers in blob storage
             const string inputContainerName = "input";
             const string outputContainerName = "output";
@@ -113,7 +129,7 @@ namespace BatchDotnetTutorialFfmpeg
 
             List<string> inputFilePaths = new List<string>(Directory.GetFileSystemEntries(inputPath, "*.mp4",
                                          SearchOption.TopDirectoryOnly));
-               
+
             // Upload data files.
             // Upload the data files using UploadResourceFilesToContainer(). This data will be
             // processed by each of the tasks that are executed on the compute nodes within the pool.
@@ -151,7 +167,7 @@ namespace BatchDotnetTutorialFfmpeg
                 Console.WriteLine("Deleting container [{0}]...", inputContainerName);
                 CloudBlobContainer container = blobClient.GetContainerReference(inputContainerName);
                 await container.DeleteIfExistsAsync();
-                   
+
                 // Print out timing info
                 timer.Stop();
                 Console.WriteLine();
@@ -164,7 +180,7 @@ namespace BatchDotnetTutorialFfmpeg
                 string response = Console.ReadLine().ToLower();
                 if (response != "n" && response != "no")
                 {
-                   await batchClient.JobOperations.DeleteJobAsync(JobId);
+                    await batchClient.JobOperations.DeleteJobAsync(JobId);
                 }
 
                 Console.Write("Delete pool? [yes] no: ");
@@ -175,7 +191,7 @@ namespace BatchDotnetTutorialFfmpeg
                 }
             }
         }
-       
+
         // FUNCTION IMPLEMENTATIONS
 
         /// <summary>
@@ -241,9 +257,9 @@ namespace BatchDotnetTutorialFfmpeg
 
             // Construct the SAS URL for blob
             string sasBlobToken = blobData.GetSharedAccessSignature(sasConstraints);
-            string blobSasUri = String.Format("{0}{1}", blobData.Uri, sasBlobToken);
+            string blobSasUri = string.Format("{0}{1}", blobData.Uri, sasBlobToken);
 
-            return new ResourceFile(blobSasUri, blobName);
+            return ResourceFile.FromUrl(blobSasUri, blobName);
         }
 
         /// <summary>
@@ -270,7 +286,7 @@ namespace BatchDotnetTutorialFfmpeg
             string sasContainerToken = container.GetSharedAccessSignature(sasConstraints);
 
             // Return the URL string for the container, including the SAS token
-            return String.Format("{0}{1}", container.Uri, sasContainerToken);
+            return string.Format("{0}{1}", container.Uri, sasContainerToken);
         }
 
 
@@ -288,11 +304,14 @@ namespace BatchDotnetTutorialFfmpeg
             {
                 Console.WriteLine("Creating pool [{0}]...", poolId);
 
+                var imageUri = configuration["ImageUrn"];
+                var imageCfg = imageUri.Split(new char[] { ':' }, StringSplitOptions.RemoveEmptyEntries);
+
                 ImageReference imageReference = new ImageReference(
-                        publisher: "MicrosoftWindowsServer",
-                        offer: "WindowsServer",
-                        sku: "2012-R2-Datacenter-smalldisk",
-                        version: "latest");
+                        publisher: imageCfg[0],
+                        offer: imageCfg[1],
+                        sku: imageCfg[2],
+                        version: imageCfg[3]);
 
                 VirtualMachineConfiguration virtualMachineConfiguration =
                 new VirtualMachineConfiguration(
@@ -306,8 +325,8 @@ namespace BatchDotnetTutorialFfmpeg
                     poolId: poolId,
                     targetDedicatedComputeNodes: DedicatedNodeCount,
                     targetLowPriorityComputeNodes: LowPriorityNodeCount,
-                    virtualMachineSize: PoolVMSize,                                                
-                    virtualMachineConfiguration: virtualMachineConfiguration);  
+                    virtualMachineSize: PoolVMSize,
+                    virtualMachineConfiguration: virtualMachineConfiguration);
 
                 // Specify the application and version to install on the compute nodes
                 // This assumes that a Windows 64-bit zipfile of ffmpeg has been added to Batch account
@@ -318,8 +337,8 @@ namespace BatchDotnetTutorialFfmpeg
                 {
                     new ApplicationPackageReference
                     {
-                    ApplicationId = appPackageId,
-                    Version = appPackageVersion
+                        ApplicationId = appPackageId,
+                        Version = appPackageVersion
                     }
                 };
 
@@ -347,16 +366,15 @@ namespace BatchDotnetTutorialFfmpeg
         /// <param name="poolId">ID of the CloudPool object in which to create the job.</param>
         private static async Task CreateJobAsync(BatchClient batchClient, string jobId, string poolId)
         {
-            
-                Console.WriteLine("Creating job [{0}]...", jobId);
+            Console.WriteLine("Creating job [{0}]...", jobId);
 
-                CloudJob job = batchClient.JobOperations.CreateJob();
-                job.Id = jobId;
-                job.PoolInformation = new PoolInformation { PoolId = poolId };
+            CloudJob job = batchClient.JobOperations.CreateJob();
+            job.Id = jobId;
+            job.PoolInformation = new PoolInformation { PoolId = poolId };
 
-                await job.CommitAsync();
+            await job.CommitAsync();
         }
-       
+
 
         /// <summary>
         /// 
@@ -379,17 +397,17 @@ namespace BatchDotnetTutorialFfmpeg
             for (int i = 0; i < inputFiles.Count; i++)
             {
                 // Assign a task ID for each iteration
-                string taskId = String.Format("Task{0}", i);
+                string taskId = string.Format("Task{0}", i);
 
                 // Define task command line to convert the video format from MP4 to MP3 using ffmpeg.
                 // Note that ffmpeg syntax specifies the format as the file extension of the input file
                 // and the output file respectively. In this case inputs are MP4.
-                string appPath = String.Format("%AZ_BATCH_APP_PACKAGE_{0}#{1}%", appPackageId, appPackageVersion);
+                string appPath = string.Format("%AZ_BATCH_APP_PACKAGE_{0}#{1}%", appPackageId, appPackageVersion);
                 string inputMediaFile = inputFiles[i].FilePath;
-                string outputMediaFile = String.Format("{0}{1}",
+                string outputMediaFile = string.Format("{0}{1}",
                     System.IO.Path.GetFileNameWithoutExtension(inputMediaFile),
                     ".mp3");
-                string taskCommandLine = String.Format("cmd /c {0}\\ffmpeg-3.4-win64-static\\bin\\ffmpeg.exe -i {1} {2}", appPath, inputMediaFile, outputMediaFile);
+                string taskCommandLine = string.Format("cmd /c {0}\\ffmpeg-3.4-win64-static\\bin\\ffmpeg.exe -i {1} {2}", appPath, inputMediaFile, outputMediaFile);
 
                 // Create a cloud task (with the task ID and command line) and add it to the task list
                 CloudTask task = new CloudTask(taskId, taskCommandLine);
@@ -465,7 +483,7 @@ namespace BatchDotnetTutorialFfmpeg
             detail.FilterClause = "executionInfo/result eq 'Failure'";
 
             List<CloudTask> failedTasks = await batchClient.JobOperations.ListTasks(jobId, detail).ToListAsync();
-          
+
             if (failedTasks.Any())
             {
                 allTasksSuccessful = false;
@@ -475,7 +493,7 @@ namespace BatchDotnetTutorialFfmpeg
             {
                 Console.WriteLine(successMessage);
             }
-        return allTasksSuccessful;
+            return allTasksSuccessful;
         }
     }
 }
