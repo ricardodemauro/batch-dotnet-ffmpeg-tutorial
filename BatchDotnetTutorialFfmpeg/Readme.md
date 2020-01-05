@@ -20,3 +20,11 @@ Add missing configuration using your account information
   "StorageAccountKey": "",
 }
 ```
+
+### FFMPEG Tool
+
+Create a application dependency with values
+
+- application id: ffmpeg
+- package version: 3.4
+- executable: [FFMPEG](https://ffmpeg.zeranoe.com/builds/win64/static/ffmpeg-3.4-win64-static.zip)
